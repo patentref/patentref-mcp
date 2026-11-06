@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "patentref-mcp"
+version = "0.4.0"
+description = "MCP server for the PatentRef API: check_patent_status, search_patents, similar_patents, get_claim_tree, get_patent_brief and the rules tools, over stdio or streamable HTTP"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["mcp>=1.10,<2", "httpx>=0.27"]
+
+[project.urls]
+Homepage = "https://patentref.io/"
+Documentation = "https://patentref.io/docs/"
+
+[project.scripts]
+patentref-mcp = "patentref_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["patentref_mcp*"]
