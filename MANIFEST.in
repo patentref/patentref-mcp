@@ -1,0 +1,2 @@
+# The sdist carries what its tests read besides the package: the changelog and the MCP Registry entry.
+include CHANGELOG.md server.json

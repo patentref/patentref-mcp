@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.patentref/patentref-mcp",
+  "title": "PatentRef",
+  "description": "PatentsView-compatible US patent API: claim trees, patent briefs and search, grants 1976 to now.",
+  "version": "0.4.1",
+  "websiteUrl": "https://patentref.io/docs/",
+  "repository": {
+    "url": "https://github.com/patentref/patentref-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "patentref-mcp",
+      "version": "0.4.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "PATENTREF_API_KEY",
+          "description": "A PatentRef API key (a free key at https://patentref.io/api/v1/meta/signup/)",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "PATENTREF_BASE",
+          "description": "The API's scheme and host (default https://patentref.io)",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

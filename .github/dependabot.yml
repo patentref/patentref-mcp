@@ -1,0 +1,16 @@
+# Weekly update checks for the Python dependencies and the GitHub Actions the workflows use. A new version is
+# proposed only once it is 14 days old.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 14
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 14

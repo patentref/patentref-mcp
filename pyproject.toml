@@ -4,17 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "patentref-mcp"
-version = "0.4.0"
+version = "0.4.1"
 description = "MCP server for the PatentRef API: check_patent_status, search_patents, similar_patents, get_claim_tree, get_patent_brief and the rules tools, over stdio or streamable HTTP"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["mcp>=1.10,<2", "httpx>=0.27"]
+dependencies = ["mcp>=1.10,<2", "httpx>=0.27", "pydantic>=2.7.2,<3"]
 
 [project.urls]
 Homepage = "https://patentref.io/"
 Documentation = "https://patentref.io/docs/"
+Source = "https://github.com/patentref/patentref-mcp"
+Changelog = "https://github.com/patentref/patentref-mcp/blob/main/CHANGELOG.md"
 
 [project.scripts]
 patentref-mcp = "patentref_mcp.server:main"
@@ -22,3 +24,13 @@ patentref-mcp = "patentref_mcp.server:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["patentref_mcp*"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
