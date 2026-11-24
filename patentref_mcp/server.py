@@ -24,7 +24,7 @@ from . import __version__
 
 BASE = os.environ.get("PATENTREF_BASE", "https://patentref.io").rstrip("/")
 TIMEOUT = float(os.environ.get("PATENTREF_TIMEOUT", "30"))
-USER_AGENT = "patentref-mcp/0.4.1"
+USER_AGENT = "patentref-mcp/0.5.0"
 
 INSTRUCTIONS = (
     "PatentRef serves the USPTO PatentsView granted-patent corpus with the PatentSearch v1 grammar plus expiry facts. "
@@ -36,6 +36,11 @@ INSTRUCTIONS = (
     "get_patent_brief gives one patent in a fixed order cut to fit max_tokens (identity, status, each independent claim's "
     "elements with their offsets, one line per dependent claim, the claim term keys; truncated and omitted say what the budget "
     "left out); quote its text fields as given and cite a claim or element by its page and anchor (page#anchor). "
+    "The S1-D tools (experimental: get_patent_units, get_same_part_links, locate_text, search_units) give the problem a "
+    "patent states and the parts its claims name, each quoted with a locator, and the patents whose claims name the same "
+    "parts; quote the text at the locator. A stated unit is the patent's own sentence or clause found by a named cue rule; a "
+    "names_same_part link says only that both patents' claims name these part words; none_found means the rules found no "
+    "such sentence, not that the patent has none. "
     "The rules tools (rep_required, fee_schedule, route_windows, pph_routes, ai_use_statement_required, grace_period, "
     "rules_changelog, rules_index) answer rows of office rules, each with its official source URL and a verbatim quote, plus "
     "rules_version and as_of; quote the row and its citation_url. They take an office, never an application number or a "
@@ -215,6 +220,92 @@ def get_patent_brief(
     published. Use it to read or summarize a patent within a context budget; use get_claim_tree for all claims in full
     structure, and check_patent_status for the status alone."""
     return _call(f"/api/v1/structure/brief/{_pid(patent_id)}/", {"max_tokens": max(300, min(int(max_tokens), 32000))})
+
+
+UnitType = Literal["Component", "StatedProblem"]
+TextField = Literal["claims", "brief_summary", "detail_description"]
+
+
+@_tool("Problems and parts of a patent (S1-D, experimental)")
+def get_patent_units(
+    patent_id: PatentId,
+    types: Annotated[list[UnitType] | None, Field(description=(
+        "The unit types to return: Component (a part the claims name) and StatedProblem (the problem the patent states). "
+        "Omitted: both."))] = None,
+) -> dict[str, Any]:
+    """Get the S1-D units of one granted US patent (experimental): the parts its claims name (unit type Component, the
+    claim's own words with the part in normal form) and the problem it states (unit type StatedProblem, the patent's own
+    sentence or clause in its brief summary or the background, found by a named cue rule), each with a locator
+    {patent_id, field, sequence, start, end}; quote the text at the locator. none_found means the rules found no such
+    sentence, not that the patent has none. Every answer says experimental true and names s1d_version. Use it to read the
+    problem a patent states and the parts it claims; use get_same_part_links for the patents whose claims name the same
+    parts, locate_text to read a locator back, and get_claim_tree for the claims in full."""
+    return _call(f"/api/v1/structure/units/{_pid(patent_id)}/", {"types": ",".join(types)} if types else None)
+
+
+@_tool("Patents naming the same parts (S1-D, experimental)")
+def get_same_part_links(
+    patent_id: PatentId,
+    size: Annotated[int, Field(description=(
+        "Links per page, 1 to 100; a value outside that range is moved to the nearest limit."))] = 20,
+    after: Annotated[list[Any] | None, Field(description=(
+        "The paging cursor: next_after of the previous page, [shared_count, patents_with_key_total, patent_number, rank]. "
+        "Omitted: the top of the list."))] = None,
+) -> dict[str, Any]:
+    """Get the granted US patents whose claims name the same parts as one patent (S1-D names_same_part, experimental),
+    ranked by the number of shared parts, then by how many patents name those parts (fewer before more), then by patent
+    number, a page at a time; each link lists up to 10 shared parts with their quotes and locators in both patents. A
+    link says only that both patents' claims name these part words. For the next page pass next_after as after. Use
+    get_patent_units for one patent's own parts and problems, and similar_patents to rank patents by a passage of text."""
+    o: dict[str, Any] = {"size": max(1, min(int(size), 100))}
+    if after:
+        o["after"] = after
+    return _call(f"/api/v1/structure/relations/{_pid(patent_id)}/", {"rel": "names_same_part", "o": json.dumps(o)})
+
+
+@_tool("Text at a locator (S1-D, experimental)")
+def locate_text(
+    patent_id: PatentId,
+    field: Annotated[TextField, Field(description=(
+        "The text the locator points into: claims, brief_summary or detail_description."))],
+    sequence: Annotated[int, Field(description=(
+        "The claim_sequence for claims, the row for brief_summary and detail_description, as the locator gives it."))],
+    start: Annotated[int, Field(description="The start offset in that text, as the locator gives it.")],
+    end: Annotated[int, Field(description=(
+        "The end offset in that text, as the locator gives it; at most 2,000 characters after start."))],
+) -> dict[str, Any]:
+    """Get the text at one S1-D locator (experimental): the field of one granted US patent at sequence, from start to
+    end, up to 2,000 characters. Use it to quote or check a unit or a shared part that get_patent_units,
+    get_same_part_links or search_units returned, and quote the text it gives; use get_claim_tree for whole claims."""
+    return _call("/api/v1/structure/locate/", {"patent_id": _pid(patent_id), "field": field, "sequence": int(sequence),
+                                               "start": int(start), "end": int(end)})
+
+
+@_tool("Search problems and parts (S1-D, experimental)")
+def search_units(
+    q: Annotated[dict[str, Any], Field(description=(
+        'The query: one JSON object, for example {"patent_id": ["10034028", "7861317"]} or {"part": "drive motor"} or '
+        '{"_and": [{"type": "StatedProblem"}, {"patent_id": "10034028"}]}; type, cue and section filter it.'))],
+    f: Annotated[list[str] | None, Field(description=(
+        "The unit fields to return. Omitted: the API's default fields."))] = None,
+    s: Annotated[list[dict[str, str]] | None, Field(description=(
+        'The sort, a list of {field: "asc" or "desc"}, patent_id before the others. Omitted: the API\'s default order.'))] = None,
+    size: Annotated[int, Field(description=(
+        "Rows per page, 1 to 100; a value outside that range is moved to the nearest limit."))] = 25,
+    after: Annotated[list[Any] | None, Field(description=(
+        "The paging cursor: next_after of the previous page. Omitted: the top of the list."))] = None,
+) -> dict[str, Any]:
+    """Search S1-D units across granted US patents (experimental) with the PatentsView grammar: q names patent_id (a
+    value or a list of up to 100) or part (a part in normal form), and type, cue and section filter it; plain values,
+    _eq, and _and or _or on one field. Each row is a unit with its text and locator; total_hits_exact and budget_reached
+    say how far the count goes. For the next page pass next_after as after. Use get_patent_units for one patent, and
+    get_same_part_links for ranked links between patents."""
+    params = {"q": json.dumps(q), "o": json.dumps({"size": max(1, min(int(size), 100)), **({"after": after} if after else {})})}
+    if f:
+        params["f"] = json.dumps(f)
+    if s:
+        params["s"] = json.dumps(s)
+    return _call("/api/v1/structure/units/", params)
 
 
 def _rules(tool_path: str, **params: str | None) -> dict[str, Any]:

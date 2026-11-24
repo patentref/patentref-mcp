@@ -1,5 +1,6 @@
-"""The 15 tools of patentref-mcp: their names and arguments as in 0.4.0, their descriptions and annotations, the request
-each one sends (httpx is replaced by a fake: no network), the errors it passes on, and the files that state the version.
+"""The 19 tools of patentref-mcp: their names and arguments as in 0.4.0 and the four S1-D tools of 0.5.0, their
+descriptions and annotations, the request each one sends (httpx is replaced by a fake: no network), the errors it passes
+on, and the files that state the version.
 
     python -m pytest -q
 """
@@ -38,6 +39,14 @@ INTERFACE_0_4_0 = {
     "build_facts": ([], [], {}),
     "search_disclosures": (["q"], ["q"], {}),
 }
+# The four S1-D tools of 0.5.0 (experimental): name -> (argument names in order, required arguments, defaults).
+INTERFACE_0_5_0 = {
+    "get_patent_units": (["patent_id", "types"], ["patent_id"], {"types": None}),
+    "get_same_part_links": (["patent_id", "size", "after"], ["patent_id"], {"size": 20, "after": None}),
+    "locate_text": (["patent_id", "field", "sequence", "start", "end"], ["patent_id", "field", "sequence", "start", "end"], {}),
+    "search_units": (["q", "f", "s", "size", "after"], ["q"], {"f": None, "s": None, "size": 25, "after": None}),
+}
+INTERFACE = {**INTERFACE_0_4_0, **INTERFACE_0_5_0}
 KEYLESS_TOOLS = {"build_facts", "search_disclosures"}
 OFFICES = ["US", "EP", "CN", "JP", "KR", "AU", "PCT"]
 # The project's wording rules for every word an agent or a reader is given: none of these words (whole words, any case,
@@ -64,10 +73,10 @@ def wording_problems(text):
 
 # ------------------------------------------------------------------ names, arguments, descriptions, annotations
 
-def test_the_tool_and_argument_names_are_those_of_0_4_0():
+def test_the_tool_and_argument_names_are_those_of_0_4_0_and_the_s1d_tools():
     listed = tools()
-    assert set(listed) == set(INTERFACE_0_4_0)
-    for name, (args, required, defaults) in INTERFACE_0_4_0.items():
+    assert set(listed) == set(INTERFACE)
+    for name, (args, required, defaults) in INTERFACE.items():
         schema = listed[name].inputSchema
         props = schema.get("properties", {})
         assert list(props) == args, name
@@ -88,7 +97,7 @@ def test_every_tool_has_a_description_that_starts_with_a_verb_and_names_its_beha
 
 
 def test_every_description_names_a_sibling_to_use_instead():
-    names = set(INTERFACE_0_4_0)
+    names = set(INTERFACE)
     for name, t in tools().items():
         others = {n for n in names - {name} if re.search(rf"\b{n}\b", t.description)}
         assert others, name
@@ -174,11 +183,18 @@ REQUESTS = {
     "rules_index": ({}, "/api/v1/rules/", {}),
     "build_facts": ({}, "/api/v1/meta/", None),
     "search_disclosures": ({"q": "  thermal fuse  "}, "/registry/search", {"q": "thermal fuse"}),
+    "get_patent_units": ({"patent_id": "us10034028", "types": ["StatedProblem"]}, "/api/v1/structure/units/10034028/",
+                         {"types": "StatedProblem"}),
+    "get_same_part_links": ({"patent_id": "US7861317"}, "/api/v1/structure/relations/7861317/",
+                            {"rel": "names_same_part", "o": '{"size": 20}'}),
+    "locate_text": ({"patent_id": "US10034028", "field": "claims", "sequence": 1, "start": 0, "end": 12},
+                    "/api/v1/structure/locate/",
+                    {"patent_id": "10034028", "field": "claims", "sequence": 1, "start": 0, "end": 12}),
 }
 
 
 def test_every_tool_is_tested_for_its_request():
-    assert set(REQUESTS) | {"search_patents"} == set(INTERFACE_0_4_0)
+    assert set(REQUESTS) | {"search_patents", "search_units"} == set(INTERFACE)
 
 
 @pytest.mark.parametrize("name", sorted(REQUESTS))
@@ -206,6 +222,34 @@ def test_search_patents_sends_the_v1_grammar_as_json(calls):
     assert json.loads(p["o"]) == {"size": 1000, "after": ["2020-01-01", "10000000"]}
     call("search_patents", {"q": {"patent_title": "laser"}})
     assert seen[1]["params"] == {"q": '{"patent_title": "laser"}', "o": '{"size": 25}'}
+
+
+def test_the_s1d_tools_send_their_queries_and_pages(calls):
+    seen, _ = calls
+    q = {"_and": [{"type": "StatedProblem"}, {"patent_id": ["10034028", "7861317"]}]}
+    call("search_units", {"q": q, "f": ["unit_id", "text"], "s": [{"patent_id": "asc"}], "size": 500,
+                          "after": ["10034028", "U1"]})
+    p = seen[0]["params"]
+    assert seen[0]["url"] == server.BASE + "/api/v1/structure/units/"
+    assert json.loads(p["q"]) == q and json.loads(p["f"]) == ["unit_id", "text"] and json.loads(p["s"]) == [{"patent_id": "asc"}]
+    assert json.loads(p["o"]) == {"size": 100, "after": ["10034028", "U1"]}
+    call("search_units", {"q": {"part": "drive motor"}})
+    assert seen[1]["params"] == {"q": '{"part": "drive motor"}', "o": '{"size": 25}'}
+    call("get_same_part_links", {"patent_id": "10034028", "size": 0, "after": [3, 41, "7861317", 20]})
+    call("get_same_part_links", {"patent_id": "10034028", "size": 1000})
+    assert json.loads(seen[2]["params"]["o"]) == {"size": 1, "after": [3, 41, "7861317", 20]}
+    assert json.loads(seen[3]["params"]["o"]) == {"size": 100} and seen[3]["params"]["rel"] == "names_same_part"
+    call("get_patent_units", {"patent_id": "RE31177"})
+    assert seen[4]["url"] == server.BASE + "/api/v1/structure/units/RE31177/" and seen[4]["params"] is None
+
+
+def test_a_unit_type_or_a_field_outside_the_list_is_refused_before_any_request(calls):
+    seen, _ = calls
+    for name, args in (("get_patent_units", {"patent_id": "10034028", "types": ["Advantage"]}),
+                       ("locate_text", {"patent_id": "10034028", "field": "abstract", "sequence": 1, "start": 0, "end": 5})):
+        with pytest.raises(ToolError):
+            call(name, args)
+    assert seen == []
 
 
 def test_values_outside_their_range_are_moved_to_the_nearest_limit(calls):
@@ -331,7 +375,7 @@ def test_the_readme_lists_every_tool_as_the_server_describes_it():
     assert "https://glama.ai/mcp/servers/patentref/patentref-mcp/badges/score.svg" in readme
     lines = [ln for ln in readme.splitlines() if ln.startswith("- **")]
     listed = {re.match(r"- \*\*(\w+)\*\*: ", ln).group(1): ln for ln in lines}
-    assert set(listed) == set(INTERFACE_0_4_0) and len(lines) == 15
+    assert set(listed) == set(INTERFACE) and len(lines) == 19
     for name, ln in listed.items():
         assert ln == f"- **{name}**: {server.summary(getattr(server, name))}", name
 

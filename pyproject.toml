@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "patentref-mcp"
-version = "0.4.1"
-description = "MCP server for the PatentRef API: check_patent_status, search_patents, similar_patents, get_claim_tree, get_patent_brief and the rules tools, over stdio or streamable HTTP"
+version = "0.5.0"
+description = "MCP server for the PatentRef API: check_patent_status, search_patents, similar_patents, get_claim_tree, get_patent_brief, the S1-D tools (experimental) and the rules tools, over stdio or streamable HTTP"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

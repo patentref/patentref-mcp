@@ -24,7 +24,8 @@ from patentref_mcp import __version__  # noqa: E402
 
 TOOLS = {"check_patent_status", "search_patents", "similar_patents", "get_claim_tree", "get_patent_brief", "rep_required",
          "fee_schedule", "route_windows", "pph_routes", "ai_use_statement_required", "grace_period", "rules_changelog",
-         "rules_index", "build_facts", "search_disclosures"}
+         "rules_index", "build_facts", "search_disclosures",
+         "get_patent_units", "get_same_part_links", "locate_text", "search_units"}   # the four S1-D tools of 0.5.0 (experimental)
 
 
 def child_env():
